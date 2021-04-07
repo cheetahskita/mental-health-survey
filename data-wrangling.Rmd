@@ -1,0 +1,421 @@
+---
+title: "Data Wrangling"
+output: html_notebook
+---
+
+# SETUP
+```{r}
+library(tidyverse)
+
+setwd('C:/Users/moth1/OneDrive/Documents/mental-health-survey')
+
+```
+
+# LOAD DATA AND CLEAN COLUMNS
+```{r message=FALSE, warning=FALSE}
+csv_filenames = list.files("./data", pattern = "*.csv")
+csv_filepaths = paste('./data', csv_filenames, sep = '/')
+years = c(2014, 2016, 2017, 2018, 2019, 2020)
+
+data_length = length(csv_filepaths)
+df_list = rep(list(0), data_length)
+for (i in 1:data_length){
+  df = read.csv(csv_filepaths[i], na.strings=c("n/a","N/A",""))
+  year_col = data.frame(year = rep(years[i], dim(df)[1]))
+  df_list[[i]] = bind_cols(year_col, df)
+  df_list[[i]] = data.frame(lapply(df_list[[i]], as.character))
+}
+
+clean_col_names = function(df){
+  col_names = colnames(df)
+  col_names = lapply(col_names, tolower)
+  col_names = lapply(col_names, gsub, pattern='\\.{2,4}', replacement='.')
+  col_names = lapply(col_names, gsub, pattern='\\.strong\\.', replacement='.')
+  col_names = lapply(col_names, gsub, pattern='^x\\.', replacement='')
+  col_names = lapply(col_names, gsub, pattern='â', replacement='a')
+  col_names = lapply(col_names, gsub, pattern='\\._\\.', replacement='.')
+  colnames(df) = col_names
+  return(df)
+}
+
+df_list = lapply(df_list, clean_col_names)
+
+# Manual Cleanup for 2014 survey (ugh)
+colnames(df_list[[1]])[3] <- "what.is.your.age."
+colnames(df_list[[1]])[5] <- "what.country.do.you.live.in."
+colnames(df_list[[1]])[22] <- "would.you.feel.comfortable.discussing.a.mental.health.disorder.with.your.coworkers."
+colnames(df_list[[1]])[10] <- "if.you.have.a.mental.health.issue.do.you.feel.that.it.interferes.with.your.work.when.being.treated.effectively."
+```
+
+# IDENTIFY QUESTIONS
+```{r}
+identify_questions = function(df_list, q_list) {
+  
+  print_qs = function(col_names, q_locs){
+    for (i in 1:length(q_locs)){
+      if (length(q_locs[[i]]) > 0){
+        for (j in 1:length(q_locs[[i]])){
+          cat( c('List ', i,
+                 ', col ', q_locs[[i]][j], ': ',
+                 substr(pluck(
+                    col_names, i, q_locs[[i]][j]), 1, 110),
+                 '\n'), sep = "")
+          # print(substr(pluck(col_names, i, q_locs[[i]][j]), 1, 2))
+        }
+      }
+    }
+  }
+  
+  col_names = lapply(df_list, colnames)
+  
+  for (i in 1:length(q_list)){
+    q = q_list[i]
+    cat(c("\nReg Expr: \"", q, "\"\n"))
+    cat("-----------------------\n")
+    
+    q_locs = lapply(col_names, grep, pattern=q, perl=TRUE)
+    
+    if (any(lapply(q_locs, length) < 1)){
+      warning("Keyword not present in all years")
+    } else if (any(lapply(q_locs, length) > 1)){
+      warning("Keyword matched with multiple questions in a year")
+    } else if (all(lapply(q_locs, length) == 1)){
+      warning("Keyword is a match!")
+    } else {
+      warning("Something went wrong")
+    }
+    warning("\nThese are the matching questions:\n")
+    
+    print_qs(col_names, q_locs)
+  }
+
+}
+
+q_list = c('^year',
+           '\\bage\\b',
+           'gender',
+           '(\\bcountry\\b.*\\blive\\b)',
+           'many.employees',
+           'self.employed',
+           '(disorder).*(past)',
+           '(have.you.*been.diagnosed.*mental.health)',
+           'sought.treatment',
+           'currently.have',
+           'does.*employer.provide.*benefits',
+           'insurance',
+           'interferes.(?!.*not)',
+           'comfortable.*discuss.*coworker'
+           )
+
+```
+
+# BACKLOG OF QUESTIONS
+```{r}
+# identify_questions(df_list,
+#                    'interferes.(?!.*not)'
+#                    )
+
+# Remaining Qs to sort through:
+{ 
+
+# 
+# has.your.employer.ever.formally.discussed.mental.health.for.example.as.part.of.a.wellness.campaign.or.other.official.communication.
+# 
+# do.you.know.the.options.for.mental.health.
+# 
+# does.your.employer.offer.resources.to.learn.more.about.mental.health.disorders.and.options.for.seeking.help.
+# 
+# would.you.be.willing.to.discuss.a.mental.health.issue.with.your.coworkers.
+# 
+# would.you.be.willing.to.discuss.a.mental.health.issue.with.your.direct.supervisor.s.
+# 
+# do.you.believe.your.productivity.is.ever.affected.by.a.mental.health.issue.
+# 
+# if.yes.what.percentage.of.your.work.time.time.performing.primary.or.secondary.job.functions.is.affected.by.a.mental.health.issue.
+# 
+# if.you.have.a.mental.health.issue.do.you.feel.that.it.interferes.with.your.work.when.being.treated.effectively.
+# 
+# if.you.have.a.mental.health.issue.do.you.feel.that.it.interferes.with.your.work.when.not.being.treated.effectively.
+# 
+# if.a.mental.health.issue.prompted.you.to.request.a.medical.leave.from.work.asking.for.that.leave.would.be.
+# 
+# if.you.have.been.diagnosed.or.treated.for.a.mental.health.disorder.do.you.ever.reveal.this.to.coworkers.or.employees.
+# 
+# if.you.have.revealed.a.mental.health.issue.to.a.coworker.or.employee.do.you.believe.this.has.impacted.you.negatively.
+# 
+# are.you.openly.identified.at.work.as.a.person.with.a.mental.health.issue.
+# 
+# do.you.feel.that.being.identified.as.a.person.with.a.mental.health.issue.would.hurt.your.career.
+# (has.being.identified.as.a.person.with.a.mental.health.issue.affected.your.career.)
+# 
+# do.you.think.that.team.members.co.workers.would.view.you.more.negatively.if.they.knew.you.suffered.from.a.mental.health.issue.
+# 
+# how.willing.would.you.be.to.share.with.friends.and.family.that.you.have.a.mental.illness.
+# 
+# have.you.observed.or.experienced.an.unsupportive.or.badly.handled.response.to.a.mental.health.issue.in.your.current.or.previous.workplace.
+# 
+# have.your.observations.of.how.another.individual.who.discussed.a.mental.health.disorder.made.you.less.likely.to.reveal.a.mental.health.issue.yourself.in.your.current.workplace.
+}
+```
+
+
+# SELECT QUESTIONS
+```{r warning=FALSE}
+select_questions = function(df_list, q_list){
+  
+  df_tot = data.frame(matrix(ncol = length(q_list), nrow = 0))
+  df_tot = data.frame(lapply(df_tot, as.character))
+  colnames(df_tot) = q_list
+  
+    for (i in 1:length(df_list)){   #for each year
+  
+      df_year = df_list[[i]]
+      df_extract = data.frame(matrix(ncol = length(q_list), nrow = dim(df_year)[1]))
+      colnames(df_extract) = q_list
+    
+      for (j in 1:length(q_list)){   #for each question
+        
+        #unpack question
+        q = q_list[j]
+        
+        #grep question in df_year
+        q_loc = grep(q, colnames(df_year), perl=TRUE)
+        
+        #assign values to df_extract
+        if(length(q_loc) > 0){
+          df_extract[q] = df_year[q_loc]
+        } else{
+          df_extract[q] = rep(NA, dim(df_year)[1])
+        }
+      }
+      
+    #append to main data frame
+    df_tot = bind_rows(df_tot, df_extract)
+    }
+  
+  return(df_tot)
+}
+
+df_tot = select_questions(df_list, q_list)
+
+```
+# DATA CLEANING HELPERS
+```{r}
+percent_na = function (df){
+  for (c in colnames(df)){
+  cat(substr(c, 0, 300), ':',
+      sum(is.na(df[c]))/length(df[[1]]),
+      '\n')
+  }
+}
+
+```
+
+```{r warning=FALSE}
+# percent_na(results)
+```
+
+# DATA CLEANING
+```{r warning=FALSE}
+results = df_tot
+results = data.frame(lapply(results, tolower))
+
+colnames(results) = c('year', 'age', 'gender', 'country', 'company_size',
+                      'self_employed', 'past_disorder', 'diagnosed_disorder',
+                      'sought_treatment', 'current_disorder', 'company_benefits',
+                      'insurance', 'interferes', 'comfortable')
+      
+## Handle columns individually
+
+
+results$age = as.integer(results$age)
+results$age[(results$age < 18) | (results$age > 75)] = NA
+results$age = replace_na(results$age, median(results$age, na.rm=TRUE))
+
+results$gender = gsub('^m$|^man$|.*\\bma.{1,3}\\b.*|cis.*\\bm.*|^mail$|.*mas.*|.*dude.*', 'male', results$gender)
+results$gender = gsub('^f$|.*woman.*|.*fem.*|cis.*\\bfemale|fm|.*she.*', 'female', results$gender)
+# results$gender = gsub('.*queer.*|non.*binary|.*trans.*|none|.*fluid.*|.*andro.*|.*bi.*', 'non-binary', results$gender)
+results$gender[(results$gender!='male') & (results$gender!='female')] = 'non-binary'
+results$gender = replace_na(results$gender, 'non-binary')
+
+results$country = gsub('united states.*', 'united states of america', results$country)
+results$country = replace_na(results$country, 'united states of america')
+
+results$company_size = factor(results$company_size, levels = c('1-5', '6-25', '26-100', '100-500', '500-1000', 'more than 1000'))
+levels(results$company_size) = c('1-25', '1-25', '26-500', '26-500', '>500', '>500')
+results$company_size = replace_na(results$company_size, '1-25')
+
+na_fill_no = c('self_employed', 'past_disorder', 'diagnosed_disorder', 'current_disorder')
+results[na_fill_no] = lapply(results[na_fill_no], replace_na, replace='no')
+
+# na_fil_na = c('sought_treatment', 'interferes', 'comfortable')
+# results[na_fil_na] = lapply(results[na_fil_na], replace_na, replace='NA')
+
+# na_fil_notsure = c('employee_benefits', 'insurance')
+# results[na_fil_notsure] = lapply(results[na_fil_notsure], replace_na, replace='not sure')
+
+results$interferes = factor(results$interferes, levels = c('never', 'rarely', 'sometimes', 'often'))
+
+## Text scrubbing for all yes/no questions
+yn_cols = c('self_employed', 'past_disorder', 'diagnosed_disorder',
+            'sought_treatment', 'current_disorder', 'company_benefits',
+            'insurance', 'interferes', 'comfortable')
+
+results[yn_cols] = lapply(results[yn_cols], gsub,
+                          pattern='true|1|some of them', replacement='yes')
+results[yn_cols] = lapply(results[yn_cols], gsub,
+                          pattern='false|0', replacement='no')
+results[yn_cols] = lapply(results[yn_cols], gsub,
+                          pattern='.*don.t know', replacement='not sure')
+results[yn_cols] = lapply(results[yn_cols], gsub,
+                          pattern='not eligible.*|not applicable.*', replacement=NA)
+results[yn_cols] = lapply(results[yn_cols], gsub,
+                          pattern='possibly|maybe', replacement='not sure')
+
+
+## Graph results to verify data is clean.
+headers = names(results)
+for (i in 1:length(headers)){
+  barplot(table(results[i]), main = headers[i])
+}
+
+
+```
+
+```{r}
+results %>%
+  filter(country %in% top_countries) %>% 
+  group_by(country, .data[["current_disorder"]]) %>% 
+  summarise(count = n()) %>% 
+  mutate(rel_perc = count/sum(count)) %>% 
+  filter(.data[["current_disorder"]]=="yes") %>% 
+  arrange(desc(rel_perc)) %>% 
+  pull(country)
+
+```
+
+# GRAPHS FOR DASHBOARD
+```{r warning=FALSE}
+top_countries = c('united states of america', 'united kingdom', 'canada', 'germany', 'netherlands', 'india', 'australia', 'france', 'ireland', 'spain')
+length(top_countries)
+
+results %>% 
+  filter(country %in% top_countries) %>% 
+  filter(!is.na(current_disorder)) %>% 
+  ggplot(aes(x = country, fill = current_disorder)) + geom_bar(position="fill")
+
+my_order = results %>%
+  filter(country %in% top_countries) %>% 
+  group_by(country, "current_disorder") %>% 
+  summarise(count = n()) %>% 
+  mutate(rel_perc = count/sum(count)) %>% 
+  filter("current_disorder"=="yes") %>% 
+  arrange(desc(rel_perc)) %>% 
+  pull(country)
+
+results %>% 
+  filter(country %in% top_countries) %>% 
+  mutate(country = factor(country, my_order)) %>% 
+  ggplot(aes(x = country, fill = current_disorder)) + geom_bar(position="fill") + labs(x = 'Country', y = 'Percent', fill = '') + scale_y_continuous(labels = scales::percent) + theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1))
+```
+
+# GRAPHS FOR DASHBOARD
+```{r warning=FALSE}
+results %>% 
+  ggplot(aes(x = company_size, fill = employee_benefits)) + geom_bar(position="fill")
+
+my_order2 = results %>%
+  group_by(employee_count, current_disorder) %>% 
+  summarise(count = n()) %>% 
+  mutate(rel_perc = count/sum(count)) %>% 
+  filter(current_disorder=="yes") %>% 
+  arrange(desc(rel_perc)) %>% 
+  pull(employee_count) %>% 
+  as.character()
+
+results %>% 
+  mutate(employee_count = factor(employee_count, my_order2)) %>% 
+  ggplot(aes(x = employee_count, fill = current_disorder)) + geom_bar(position="fill")
+
+results %>% 
+  ggplot(aes(x = age, fill = current_disorder)) + geom_bar(position="stack")
+
+## percent yes by age
+perc_yes = results %>% 
+  group_by(age, comfortable) %>% 
+  summarise(count = n()) %>% 
+  mutate(perc_yes = count/sum(count)) %>% 
+  filter(comfortable == "no") 
+
+perc_yes %>% 
+  filter(age > 21, age < 55) %>% 
+  ggplot(aes(x = age, y = perc_yes)) + geom_smooth()
+
+results %>% 
+  filter(age > 21, age < 55) %>% 
+  ggplot(aes(x = age, fill = current_disorder)) + geom_bar(position="stack")
+ggplot(aes(x = age, y = percent)) + geom_smooth(labels='Yes') + labs(x = 'Age', y = 'Percent', title = "Avg. Percent Who Answered 'Yes'", fill = '') + scale_y_continuous(labels = scales::percent) + theme(plot.title = element_text(face = 'bold'), legend.position = 'right')
+#################### by gender
+
+results %>% 
+  ggplot(aes(x = gender, fill = current_disorder)) + geom_bar(position="fill")
+
+my_order3 = results %>%
+  group_by(gender, current_disorder) %>% 
+  summarise(count = n()) %>% 
+  mutate(rel_perc = count/sum(count)) %>% 
+  filter(current_disorder=="yes") %>% 
+  arrange(desc(rel_perc)) %>% 
+  pull(gender)
+
+results %>% 
+  mutate(gender = factor(gender, my_order3)) %>% 
+  ggplot(aes(x = gender, fill = current_disorder)) + geom_bar(position="fill")
+
+
+age_percent = results %>%
+  filter(age > 21, age < 55, !is.na(current_disorder)) %>%
+  group_by(age, current_disorder) %>%
+  summarise(count = n()) %>%
+  mutate(percent = count/sum(count)) %>%
+  filter(current_disorder == "yes")
+
+age_percent %>% 
+  filter(age > 21, age < 55, !is.na(current_disorder)) %>% 
+  ggplot(aes(x = age, y = percent, color='Yes')) + geom_smooth() + scale_color_manual(name = "Response:", values = '#00BFC4') + labs(x = 'Age', y = 'Percent', title = "Avg. Percent Who Answered 'Yes'", fill = '') + scale_y_continuous(labels = scales::percent) + theme(plot.title = element_text(face = 'bold'))
+
+
+```
+
+
+# SUPPLEMENTARY DATA
+```{r}
+# Pulled from 2019 NSDUH Report and 2019 CDC Death Rates
+year = c(2014:2020)
+depression = c(6.6, 6.7, 6.7, 7.1, 7.2, 7.8, NA)
+mental_illness = c(18.1, 17.9, 18.3, 18.9, 19.1, 20.6, NA)
+suicidal_thoughts = c(3.9, 4, 4, 4.3, 4.3, 4.8, NA)
+suicide_rate = c(13, 13.3, 13.4, 14, 14.2, 14.5, NA)
+nsduh = data.frame(year, depression, mental_illness, suicidal_thoughts, suicide_rate)
+print.data.frame(nsduh)
+```
+
+# DATA OUTPUT
+```{r}
+results = results[c('year', 'age', 'gender', 'country',
+                    'company_size', 'current_disorder',
+                    'company_benefits', 'interferes', 'comfortable')]
+write_csv(results, 'results.csv')
+write_csv(nsduh, 'nsduh.csv')
+
+```
+
+# RELOAD DATA FOR EDA
+```{r}
+library(tidyverse)
+setwd('C:/Users/moth1/OneDrive/Documents/mental-health-survey')
+
+results = read_csv('results.csv', col_types = 'ddcccccccccccc')
+nsduh = read_csv('nsduh.csv', col_types = 'ddddd')
+```
+
